@@ -2,29 +2,39 @@ import cv2
 import numpy as np
 from hand_tracking import HandTracker
 
+# ================== CAMERA SETUP ==================
 cap = cv2.VideoCapture(0)
-cap.set(3, 1280)
-cap.set(4, 720)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+cv2.namedWindow("AirWrite", cv2.WINDOW_NORMAL)
+cv2.setWindowProperty("AirWrite", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 tracker = HandTracker()
 
+# ================== CANVAS ==================
 canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
 
+# ================== DRAW SETTINGS ==================
 prev_x, prev_y = 0, 0
-draw_color = (255, 255, 255)   # default white
-brush_thickness = 5
-eraser_size = 40
+draw_color = (255, 255, 255)
+
+brush_thickness = 10
+min_thickness = 5
+max_thickness = 40
+
+eraser_size = 50
+
+# Throttle thickness update
+thickness_cooldown = 0
 
 def fingers_up(lm):
-    fingers = []
-    fingers.append(0)  # thumb ignored
-
-    fingers.append(1 if lm[8][2] < lm[6][2] else 0)
-    fingers.append(1 if lm[12][2] < lm[10][2] else 0)
-    fingers.append(1 if lm[16][2] < lm[14][2] else 0)
-    fingers.append(1 if lm[20][2] < lm[18][2] else 0)
-
-    return fingers.count(1)
+    return sum([
+        lm[8][2] < lm[6][2],    # index
+        lm[12][2] < lm[10][2],  # middle
+        lm[16][2] < lm[14][2],  # ring
+        lm[20][2] < lm[18][2]   # pinky
+    ])
 
 while True:
     success, frame = cap.read()
@@ -36,57 +46,85 @@ while True:
     landmarks = tracker.get_landmarks(frame)
 
     if landmarks:
-        finger_count = fingers_up(landmarks)
         ix, iy = landmarks[8][1], landmarks[8][2]
+        count = fingers_up(landmarks)
+
+        index_up = landmarks[8][2] < landmarks[6][2]
+        middle_up = landmarks[12][2] < landmarks[10][2]
+        ring_up = landmarks[16][2] < landmarks[14][2]
+        pinky_up = landmarks[20][2] < landmarks[18][2]
+
+        rock = index_up and pinky_up and not middle_up and not ring_up
 
         # ✍️ DRAW
-        if finger_count == 1:
-            if prev_x == 0 and prev_y == 0:
+        if count == 1:
+            if prev_x == 0:
                 prev_x, prev_y = ix, iy
             cv2.line(canvas, (prev_x, prev_y), (ix, iy), draw_color, brush_thickness)
             prev_x, prev_y = ix, iy
-            cv2.circle(frame, (ix, iy), 8, draw_color, cv2.FILLED)
-
-        # 🎨 COLOR SELECTION (3 fingers)
-        elif finger_count == 3:
-            prev_x, prev_y = 0, 0
-            if ix < 400:
-                draw_color = (0, 0, 255)      # Red
-            elif ix < 800:
-                draw_color = (0, 255, 0)      # Green
-            else:
-                draw_color = (255, 0, 0)      # Blue
+            cv2.circle(frame, (ix, iy), 6, draw_color, cv2.FILLED)
 
         # ✊ ERASER
-        elif finger_count == 0:
+        elif count == 0:
             cv2.circle(canvas, (ix, iy), eraser_size, (0, 0, 0), -1)
+            cv2.circle(frame, (ix, iy), eraser_size, (200, 200, 200), 2)
             prev_x, prev_y = 0, 0
 
-        # 🖐️ THICKNESS CONTROL (4+ fingers)
-        elif finger_count >= 4:
-            brush_thickness = max(1, min(50, 720 - iy // 10))
+        # 🤟 THICKNESS CONTROL (SMOOTH)
+        elif rock:
+            if thickness_cooldown == 0:
+                if iy < 360:
+                    brush_thickness = min(max_thickness, brush_thickness + 2)
+                else:
+                    brush_thickness = max(min_thickness, brush_thickness - 2)
+                thickness_cooldown = 8
             prev_x, prev_y = 0, 0
 
         else:
             prev_x, prev_y = 0, 0
 
-    # Merge canvas with frame
+    if thickness_cooldown > 0:
+        thickness_cooldown -= 1
+
+    # ================== MERGE CANVAS ==================
     gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
     _, inv = cv2.threshold(gray, 20, 255, cv2.THRESH_BINARY_INV)
     inv = cv2.cvtColor(inv, cv2.COLOR_GRAY2BGR)
     frame = cv2.bitwise_and(frame, inv)
     frame = cv2.bitwise_or(frame, canvas)
 
-    # UI Info
-    cv2.putText(frame, f"Color: {draw_color}", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2)
-    cv2.putText(frame, f"Thickness: {brush_thickness}", (20, 80),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    # ================== PREMIUM UI ==================
+    # AirWrite Title
+    cv2.putText(frame, "AirWrite", (520, 60),
+                cv2.FONT_HERSHEY_DUPLEX, 1.6, (0, 0, 0), 6)
+    cv2.putText(frame, "AirWrite", (520, 60),
+                cv2.FONT_HERSHEY_DUPLEX, 1.6, (255, 255, 255), 2)
+
+    # Thickness Sidebar (modern look)
+    bar_x = 1220
+    bar_top, bar_bottom = 120, 600
+
+    cv2.rectangle(frame, (bar_x, bar_top), (bar_x + 16, bar_bottom), (80, 80, 80), -1)
+
+    fill_height = int((brush_thickness / max_thickness) * (bar_bottom - bar_top))
+    cv2.rectangle(
+        frame,
+        (bar_x, bar_bottom - fill_height),
+        (bar_x + 16, bar_bottom),
+        draw_color,
+        -1
+    )
+
+    cv2.putText(frame, "Size", (1200, 100),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
 
     cv2.imshow("AirWrite", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
         break
+    elif key == ord('c'):
+        canvas[:] = 0   # MASTER CLEAR
 
 cap.release()
 cv2.destroyAllWindows()
