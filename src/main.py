@@ -1,0 +1,64 @@
+import cv2
+import numpy as np
+from hand_tracking import HandTracker
+
+cap = cv2.VideoCapture(0)
+cap.set(3, 1280)
+cap.set(4, 720)
+
+tracker = HandTracker()
+
+# White canvas
+canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+# Previous finger position
+prev_x, prev_y = 0, 0
+
+while True:
+    success, frame = cap.read()
+    if not success:
+        break
+
+    frame = cv2.flip(frame, 1)
+
+    # Detect hands
+    frame = tracker.find_hands(frame)
+    landmarks = tracker.get_landmarks(frame)
+
+    if landmarks:
+        # Get index & middle finger tips
+        ix, iy = landmarks[8][1], landmarks[8][2]
+        mx, my = landmarks[12][1], landmarks[12][2]
+
+        # Check which fingers are up
+        index_up = iy < landmarks[6][2]
+        middle_up = my < landmarks[10][2]
+
+        # ✍️ Drawing mode (only index finger)
+        if index_up and not middle_up:
+            if prev_x == 0 and prev_y == 0:
+                prev_x, prev_y = ix, iy
+
+            cv2.line(canvas, (prev_x, prev_y), (ix, iy), (255, 255, 255), 5)
+            prev_x, prev_y = ix, iy
+
+            cv2.circle(frame, (ix, iy), 8, (0, 0, 255), cv2.FILLED)
+
+        # ❌ Stop drawing (two fingers)
+        else:
+            prev_x, prev_y = 0, 0
+
+    # Merge canvas with frame
+    gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+    _, inv = cv2.threshold(gray, 20, 255, cv2.THRESH_BINARY_INV)
+    inv = cv2.cvtColor(inv, cv2.COLOR_GRAY2BGR)
+    frame = cv2.bitwise_and(frame, inv)
+    frame = cv2.bitwise_or(frame, canvas)
+
+    cv2.imshow("AirWrite", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
