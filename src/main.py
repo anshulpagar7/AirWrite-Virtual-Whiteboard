@@ -88,11 +88,11 @@ while True:
 
         rock = index_up and pinky_up and not middle_up and not ring_up
 
-        # ✍️ PEN
+        # PEN
         if count == 1:
             if current_mode != "PEN":
                 save_state()
-                show_toast("✍️ Mode: PEN", draw_color)
+                show_toast("Mode: PEN", draw_color)
                 current_mode = "PEN"
 
             if prev_x == 0:
@@ -103,7 +103,7 @@ while True:
             prev_x, prev_y = ix, iy
             cv2.circle(frame, (ix, iy), 6, draw_color, cv2.FILLED)
 
-        # 🎨 COLOR CHANGE
+        # COLOR CHANGE
         elif count == 3:
             prev_x, prev_y = 0, 0
 
@@ -117,21 +117,21 @@ while True:
                 draw_color = (255, 0, 0)
                 color_name = "BLUE"
 
-            show_toast(f"🎨 Color: {color_name}", draw_color)
+            show_toast(f"Color: {color_name}", draw_color)
             current_mode = "COLOR"
 
-        # 🧽 ERASER
+        # ERASER
         elif count == 0:
             if current_mode != "ERASER":
                 save_state()
-                show_toast("🧽 Mode: ERASER", (200, 200, 200))
+                show_toast("Mode: ERASER", (200, 200, 200))
                 current_mode = "ERASER"
 
             cv2.circle(canvas, (ix, iy), eraser_size, (0, 0, 0), -1)
             cv2.circle(frame, (ix, iy), eraser_size, (200, 200, 200), 2)
             prev_x, prev_y = 0, 0
 
-        # 📏 THICKNESS (🤟)
+        # THICKNESS CONTROL
         elif rock:
             if thickness_cooldown == 0:
                 if iy < 360:
@@ -139,7 +139,7 @@ while True:
                 else:
                     brush_thickness = max(min_thickness, brush_thickness - 2)
 
-                show_toast(f"📏 Size: {brush_thickness}", draw_color)
+                show_toast(f"Size: {brush_thickness}", draw_color)
                 thickness_cooldown = 8
 
             current_mode = "SIZE"
@@ -160,7 +160,6 @@ while True:
     frame = cv2.bitwise_or(frame, canvas)
 
     # ================== UI ==================
-    # Title
     cv2.putText(frame, "AirWrite", (520, 60),
                 cv2.FONT_HERSHEY_DUPLEX, 1.6, (0, 0, 0), 6)
     cv2.putText(frame, "AirWrite", (520, 60),
@@ -201,22 +200,22 @@ while True:
     elif key == ord('c'):
         save_state()
         canvas[:] = 0
-        show_toast("🧼 Canvas Cleared")
+        show_toast("Canvas Cleared")
 
     elif key == ord('s'):
         filename = f"{SAVE_DIR}/airwrite_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         cv2.imwrite(filename, canvas)
-        show_toast("💾 Drawing Saved", (0, 255, 0))
+        show_toast("Drawing Saved", (0, 255, 0))
 
     elif key == ord('z') and undo_stack:
         redo_stack.append(canvas.copy())
         canvas = undo_stack.pop()
-        show_toast("↩️ Undo")
+        show_toast("Undo")
 
     elif key == ord('y') and redo_stack:
         undo_stack.append(canvas.copy())
         canvas = redo_stack.pop()
-        show_toast("↪️ Redo")
+        show_toast("Redo")
 
 cap.release()
 cv2.destroyAllWindows()
