@@ -11,21 +11,17 @@ tracker = HandTracker()
 canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
 
 prev_x, prev_y = 0, 0
+draw_color = (255, 255, 255)   # default white
+brush_thickness = 5
 eraser_size = 40
 
 def fingers_up(lm):
     fingers = []
+    fingers.append(0)  # thumb ignored
 
-    # Thumb (ignored for simplicity)
-    fingers.append(0)
-
-    # Index
     fingers.append(1 if lm[8][2] < lm[6][2] else 0)
-    # Middle
     fingers.append(1 if lm[12][2] < lm[10][2] else 0)
-    # Ring
     fingers.append(1 if lm[16][2] < lm[14][2] else 0)
-    # Pinky
     fingers.append(1 if lm[20][2] < lm[18][2] else 0)
 
     return fingers.count(1)
@@ -36,7 +32,6 @@ while True:
         break
 
     frame = cv2.flip(frame, 1)
-
     frame = tracker.find_hands(frame)
     landmarks = tracker.get_landmarks(frame)
 
@@ -48,22 +43,30 @@ while True:
         if finger_count == 1:
             if prev_x == 0 and prev_y == 0:
                 prev_x, prev_y = ix, iy
-            cv2.line(canvas, (prev_x, prev_y), (ix, iy), (255, 255, 255), 5)
+            cv2.line(canvas, (prev_x, prev_y), (ix, iy), draw_color, brush_thickness)
             prev_x, prev_y = ix, iy
-            cv2.circle(frame, (ix, iy), 8, (0, 0, 255), cv2.FILLED)
+            cv2.circle(frame, (ix, iy), 8, draw_color, cv2.FILLED)
+
+        # 🎨 COLOR SELECTION (3 fingers)
+        elif finger_count == 3:
+            prev_x, prev_y = 0, 0
+            if ix < 400:
+                draw_color = (0, 0, 255)      # Red
+            elif ix < 800:
+                draw_color = (0, 255, 0)      # Green
+            else:
+                draw_color = (255, 0, 0)      # Blue
 
         # ✊ ERASER
         elif finger_count == 0:
             cv2.circle(canvas, (ix, iy), eraser_size, (0, 0, 0), -1)
-            cv2.circle(frame, (ix, iy), eraser_size, (255, 0, 0), 2)
             prev_x, prev_y = 0, 0
 
-        # 🖐️ CLEAR BOARD
-        elif finger_count == 5:
-            canvas[:] = 0
+        # 🖐️ THICKNESS CONTROL (4+ fingers)
+        elif finger_count >= 4:
+            brush_thickness = max(1, min(50, 720 - iy // 10))
             prev_x, prev_y = 0, 0
 
-        # ❌ STOP DRAWING
         else:
             prev_x, prev_y = 0, 0
 
@@ -73,6 +76,12 @@ while True:
     inv = cv2.cvtColor(inv, cv2.COLOR_GRAY2BGR)
     frame = cv2.bitwise_and(frame, inv)
     frame = cv2.bitwise_or(frame, canvas)
+
+    # UI Info
+    cv2.putText(frame, f"Color: {draw_color}", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, draw_color, 2)
+    cv2.putText(frame, f"Thickness: {brush_thickness}", (20, 80),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
     cv2.imshow("AirWrite", frame)
 
