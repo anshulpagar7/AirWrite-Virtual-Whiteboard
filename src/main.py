@@ -16,7 +16,7 @@ tracker = HandTracker()
 # ================== CANVAS ==================
 canvas = np.zeros((720, 1280, 3), dtype=np.uint8)
 
-# ================== DRAW SETTINGS ==================
+# ================== STATE ==================
 prev_x, prev_y = 0, 0
 draw_color = (255, 255, 255)
 color_name = "WHITE"
@@ -28,10 +28,19 @@ max_thickness = 40
 eraser_size = 50
 thickness_cooldown = 0
 
-# Floating text
+# Toast system
 toast_text = ""
+toast_color = (255, 255, 255)
 toast_time = 0
-TOAST_DURATION = 2.5  # seconds
+TOAST_DURATION = 2.5
+
+current_mode = ""
+
+def show_toast(text, color=(255, 255, 255)):
+    global toast_text, toast_color, toast_time
+    toast_text = text
+    toast_color = color
+    toast_time = time.time()
 
 def fingers_up(lm):
     return sum([
@@ -63,13 +72,17 @@ while True:
 
         # ✍️ DRAW
         if count == 1:
+            if current_mode != "PEN":
+                show_toast("Mode: PEN", draw_color)
+                current_mode = "PEN"
+
             if prev_x == 0:
                 prev_x, prev_y = ix, iy
             cv2.line(canvas, (prev_x, prev_y), (ix, iy), draw_color, brush_thickness)
             prev_x, prev_y = ix, iy
             cv2.circle(frame, (ix, iy), 6, draw_color, cv2.FILLED)
 
-        # 🎨 COLOR CHANGE (3 fingers)
+        # 🎨 COLOR CHANGE
         elif count == 3:
             prev_x, prev_y = 0, 0
 
@@ -83,11 +96,15 @@ while True:
                 draw_color = (255, 0, 0)
                 color_name = "BLUE"
 
-            toast_text = f"Color: {color_name}"
-            toast_time = time.time()
+            show_toast(f"Color: {color_name}", draw_color)
+            current_mode = "COLOR"
 
         # ✊ ERASER
         elif count == 0:
+            if current_mode != "ERASER":
+                show_toast("Mode: ERASER", (200, 200, 200))
+                current_mode = "ERASER"
+
             cv2.circle(canvas, (ix, iy), eraser_size, (0, 0, 0), -1)
             cv2.circle(frame, (ix, iy), eraser_size, (200, 200, 200), 2)
             prev_x, prev_y = 0, 0
@@ -99,7 +116,11 @@ while True:
                     brush_thickness = min(max_thickness, brush_thickness + 2)
                 else:
                     brush_thickness = max(min_thickness, brush_thickness - 2)
+
+                show_toast(f"Size: {brush_thickness}", draw_color)
                 thickness_cooldown = 8
+
+            current_mode = "SIZE"
             prev_x, prev_y = 0, 0
 
         else:
@@ -136,10 +157,10 @@ while True:
     cv2.putText(frame, "Size", (1200, 100),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
 
-    # Floating color toast
+    # Toast display
     if time.time() - toast_time < TOAST_DURATION:
         cv2.putText(frame, toast_text, (520, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, draw_color, 3)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, toast_color, 3)
 
     cv2.imshow("AirWrite", frame)
 
@@ -148,6 +169,7 @@ while True:
         break
     elif key == ord('c'):
         canvas[:] = 0
+        show_toast("Canvas Cleared", (255, 255, 255))
 
 cap.release()
 cv2.destroyAllWindows()
